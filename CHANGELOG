@@ -1,3 +1,10 @@
+0.05	13 August 2002
+	Checked compatibility with Thread::Conveyor 0.06.  It is.
+
+	7 August 2002
+	Fixed problem in test-suite cause by some thread inertia that did
+	not show up on my own sllow development machine.
+
 0.04	7 August 2002
 	Added "private" default optimization setting, instead of the one
 	from Thread::Conveyor.

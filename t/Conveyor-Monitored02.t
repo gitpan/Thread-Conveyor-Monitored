@@ -44,7 +44,7 @@ diag( "$times boxes optimized for $optimize" );
   my $onbelt = $mbelt->onbelt;
   ok( $onbelt >= 0 and $onbelt <= $times, 'check number of values on the belt');
 
-  threads->yield;
+  threads->yield until $class;
   ok( $class =~ m#^Thread::Conveyor::#,	'check result of ->belt' );
 
   is( ($mbelt->shutdown)[0],'anydone',	'check result of shutdown' );
