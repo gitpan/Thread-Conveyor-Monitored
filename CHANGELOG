@@ -1,3 +1,11 @@
+0.08	30 August 2002
+	Changed all modules to use AutoLoader to defer loading of necessary
+	subroutines to when they are actually needed.  This should save
+	memory and CPU for larger programs, or with large numbers of threads.
+	The test-suite only marginally takes more memory and uses less CPU:
+	overhead of compiling is levelled out with the overhead of cloning
+	pre-compiled routines.
+
 0.07	27 August 2002
 	Added support for checkpoint routine with the "checkpoint" and
 	"frequency" fields and the "frequency" method.  Added test-suite

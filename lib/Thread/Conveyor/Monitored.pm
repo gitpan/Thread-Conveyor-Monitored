@@ -3,8 +3,12 @@ package Thread::Conveyor::Monitored;
 # Make sure we have version info for this module
 # Make sure we do everything by the book from now on
 
-our $VERSION : unique = '0.07';
+our $VERSION = '0.08';
 use strict;
+
+# Make sure we only load stuff when we actually need it
+
+use AutoLoader 'AUTOLOAD';
 
 # Make sure we have conveyor belts
 
@@ -15,14 +19,49 @@ use Thread::Conveyor ();
 # Set default optimization
 # Set default checkpoint frequency
 
-my $cloned = 0;
-my $BELT;
-my $OPTIMIZE = 'memory';
-my $FREQUENCY = 1000;
+our $cloned = 0;
+our $BELT;
+our $OPTIMIZE = 'memory';
+our $FREQUENCY = 1000;
 
 # Satisfy -require-
 
 1;
+
+#---------------------------------------------------------------------------
+
+# Routines for standard Perl features
+
+#---------------------------------------------------------------------------
+#  IN: 1 namespace being cloned (ignored)
+
+sub CLONE { $cloned++ } #CLONE
+
+#---------------------------------------------------------------------------
+#  IN: 1 instantiated object
+
+sub DESTROY {
+
+# Return now if we're in a rogue DESTROY
+
+    return unless UNIVERSAL::isa( $_[0],__PACKAGE__ ); #HACK
+
+# Obtain the object
+# Return now if we're not allowed to run DESTROY
+
+    my $self = shift;
+    return unless $self->{'cloned'} == $cloned;
+
+# Tell the monitoring thread to quit now
+
+    $self->shutdown;
+} #DESTROY
+
+#---------------------------------------------------------------------------
+
+# AutoLoader takes over from here
+
+__END__
 
 #---------------------------------------------------------------------------
 
@@ -363,37 +402,6 @@ sub _monitor {
 
 #---------------------------------------------------------------------------
 
-# Routines for standard Perl features
-
-#---------------------------------------------------------------------------
-#  IN: 1 namespace being cloned (ignored)
-
-sub CLONE { $cloned++ } #CLONE
-
-#---------------------------------------------------------------------------
-#  IN: 1 instantiated object
-
-sub DESTROY {
-
-# Return now if we're in a rogue DESTROY
-
-    return unless UNIVERSAL::isa( $_[0],__PACKAGE__ ); #HACK
-
-# Obtain the object
-# Return now if we're not allowed to run DESTROY
-
-    my $self = shift;
-    return unless $self->{'cloned'} == $cloned;
-
-# Tell the monitoring thread to quit now
-
-    $self->shutdown;
-} #DESTROY
-
-#---------------------------------------------------------------------------
-
-__END__
-
 =head1 NAME
 
 Thread::Conveyor::Monitored - monitor a belt for specific content
@@ -620,14 +628,14 @@ No checkpointing will occur by default.  The frequency of checkpointing can
 be specified with the "frequency" field.
 
 The specified subroutine should not expect any parameters to be passed.  Any
-values retuirned by the checkpointing routine, will be lost.
+values returned by the checkpointing routine, will be lost.
 
 =item frequency
 
  frequency => 100,                             # default = 1000
 
 The "frequency" field specifies the number of boxes that should have been
-mnitored before the "checkpoint" routine is called.  If a checkpoint routine
+monitored before the "checkpoint" routine is called.  If a checkpoint routine
 is specified but no frequency field is specified, then a frequency of B<1000>
 will be assumed.
 
@@ -821,18 +829,24 @@ of the belt.
 The "tid" method returns the thread id of the thread object that is monitoring
 the contents of the belt.
 
+=head1 OPTIMIZATIONS
+
+This module uses L<AutoLoader> to reduce memory and CPU usage. This causes
+subroutines only to be compiled in a thread when they are actually needed at
+the expense of more CPU when they need to be compiled.  Simple benchmarks
+however revealed that the overhead of the compiling single routines is not
+much more (and sometimes a lot less) than the overhead of cloning a Perl
+interpreter with a lot of subroutines pre-loaded.
+
 =head1 CAVEATS
 
 You cannot remove any boxes from the belt, as that is done by the monitoring
 thread.  Therefore, the methods "take", "take_dontwait", "peek" and
 "peek_dontwait" are disabled on this object.
 
-Passing unshared values between threads is accomplished by freezing the
-specified values using C<Storable> when putting the boxes on the belt and
-thawing the values when the box is taken off the belt.  This allows for
-great flexibility at the expense of more CPU usage.  Unfortunately it also
-limits what can be passed, as e.g. code references and blessed objects can
-B<not> (yet) be frozen and therefore not be passed.
+Passing unshared values between threads is accomplished by serializing the
+specified values using L<Thread::Serialize>.  Please see the CAVEATS section
+there for an up-to-date status of what can be passed around between threads.
 
 =head1 AUTHOR
 
@@ -848,6 +862,6 @@ modify it under the same terms as Perl itself.
 
 =head1 SEE ALSO
 
-L<threads>, L<threads::shared>, L<Thread::Conveyor>, L<Storable>.
+L<threads>, L<threads::shared>, L<Thread::Conveyor>, L<Thread::Serialize>.
 
 =cut
