@@ -6,7 +6,7 @@ BEGIN {				# Magic Perl CORE pragma
 }
 
 use strict;
-use Test::More tests => 3+(2*4);
+use Test::More tests => 3 + (2 * (4 * (2 * 4)));
 
 BEGIN { use_ok('threads') }
 BEGIN { use_ok('Thread::Conveyor::Monitored') }
@@ -20,40 +20,57 @@ can_ok( 'Thread::Conveyor::Monitored',qw(
  peek
  peek_dontwait
  put
+ shutdown
  take
  take_dontwait
+ thread
+ tid
 ) );
 
 my @list : shared;
-my $times = 1000;
 
-check( Thread::Conveyor::Monitored->new( { monitor => \&monitor } ) );
+foreach my $optimize (qw(cpu memory)) {
 
-my ($belt,$thread) = Thread::Conveyor->new;
-my $exit = 'exit';
-($belt,$thread) = Thread::Conveyor::Monitored->new(
- {
-  monitor => 'monitor',
-  belt => $belt,
-  exit => $exit,
- }
-);
-check( $belt,$thread,$exit );
+foreach my $times (10,100,1000,int(rand(1000))) {
+
+diag ( "$times boxes optimized for $optimize" );
+
+  check( Thread::Conveyor::Monitored->new(
+   {
+    optimize => $optimize,
+    monitor => \&monitor,
+   }
+  ),$times );
+
+  my $belt = Thread::Conveyor->new( {optimize => $optimize} );
+  my $exit = 'exit';
+  my $mbelt = Thread::Conveyor::Monitored->new(
+   {
+    monitor => 'monitor',
+    belt => $belt,
+    exit => $exit,
+   }
+  );
+  check( $mbelt,$times,$exit,1 );
+} #$times
+
+} #$optimize
 
 sub check {
 
-  my ($belt,$thread,$exit) = @_;
+  my ($mbelt,$times,$exit,$shutdown) = @_;
+  my $mthread = $mbelt->thread;
   @list = ();
 
-  isa_ok( $belt, 'Thread::Conveyor::Monitored', 'check belt object type' );
-  isa_ok( $thread, 'threads',		'check thread object type' );
+  isa_ok( $mbelt, 'Thread::Conveyor::Monitored', 'check belt object type' );
+  isa_ok( $mthread, 'threads',		'check thread object type' );
 
-  $belt->put( [$_,$_+1] ) foreach 1..$times;
-  my $onbelt = $belt->onbelt;
+  my $belt = $mbelt->belt;
+  $mbelt->put( [$_,$_+1] ) foreach 1..$times;
+  my $onbelt = $mbelt->onbelt;
   ok( $onbelt >= 0 and $onbelt <= $times, 'check number of values on belt' );
 
-  $belt->put( $exit ); # stop monitoring
-  $thread->join;
+  $mbelt->shutdown;
 
   my $check = '';
   $check .= ($_.($_+1)) foreach 1..$times;

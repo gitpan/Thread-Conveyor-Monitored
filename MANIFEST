@@ -5,6 +5,5 @@ TODO
 VERSION
 Makefile.PL
 lib/Thread/Conveyor/Monitored.pm
-lib/Thread/Conveyor/Monitored/Throttled.pm
 t/Conveyor-Monitored01.t
 t/Conveyor-Monitored02.t

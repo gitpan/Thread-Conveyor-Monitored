@@ -6,47 +6,56 @@ BEGIN {				# Magic Perl CORE pragma
 }
 
 use strict;
-use Test::More tests => 12;
+use Test::More tests => 1 + (2 * (4 * 11));
 
 BEGIN { use_ok('Thread::Conveyor::Monitored') }
 
-my $times = 1000;
 my $file = 'outmonitored';
 my $handle;
-my $object : shared;
+my $class : shared;
 
-my ($belt,$thread) = Thread::Conveyor::Monitored->new(
- {
-  pre => sub {
-              ok( open( $handle,">$_[0]" ), 'check pre opening file' );
-              $object = ref(Thread::Conveyor::Monitored->belt);
-             },
-  monitor => sub { print $handle (%{$_[0]}) },
-  post => sub {
-               ok( close( $handle ), 'check post closing file');
-	       return 'anydone'
-              },
- },
- $file
-);
+foreach my $optimize (qw(cpu memory)) {
 
-isa_ok( $belt, 'Thread::Conveyor::Monitored', 'check belt object type' );
-isa_ok( $thread, 'threads',		'check thread object type' );
+foreach my $times (10,100,1000,int(rand(1000))) {
 
-$belt->put( {$_ => $_+1} ) foreach 1..$times;
-my $onbelt = $belt->onbelt;
-ok( $onbelt >= 0 and $onbelt <= $times, 'check number of values on the belt' );
+diag( "$times boxes optimized for $optimize" );
 
-$belt->put( undef ); # stop monitoring
-is( $thread->join,'anydone',			'check result of join' );
+  my $mbelt = Thread::Conveyor::Monitored->new(
+   {
+    optimize => $optimize,
+    pre => sub {
+                ok( open( $handle,">$_[0]" ), 'check pre opening file' );
+                $class = ref(Thread::Conveyor::Monitored->belt);
+               },
+    monitor => sub { print $handle (%{$_[0]}) },
+    post => sub {
+                 ok( close( $handle ), 'check post closing file');
+                 return 'anydone'
+                },
+   },
+   $file
+  );
 
-ok( $object =~ m#^Thread::Conveyor::Monitored(?:::Throttled)?$#,
- 'check result of ->belt' );
+  isa_ok( $mbelt, 'Thread::Conveyor::Monitored', 'check belt object type' );
+  my $thread = $mbelt->thread;
+  isa_ok( $thread, 'threads',		'check thread object type' );
 
-my $check = '';
-$check .= ($_.($_+1)) foreach 1..$times;
-ok( open( my $in,"<$file" ),		'check opening of file' );
-is( join('',<$in>), $check,		'check whether monitoring ok' );
-ok( close( $in ),			'check closing of file' );
+  $mbelt->put( {$_ => $_+1} ) foreach 1..$times;
+  my $onbelt = $mbelt->onbelt;
+  ok( $onbelt >= 0 and $onbelt <= $times, 'check number of values on the belt');
 
-ok( unlink( $file ) );
+  threads->yield;
+  ok( $class =~ m#^Thread::Conveyor::#,	'check result of ->belt' );
+
+  is( ($mbelt->shutdown)[0],'anydone',	'check result of shutdown' );
+
+  my $check = '';
+  $check .= ($_.($_+1)) foreach 1..$times;
+  ok( open( my $in,"<$file" ),		'check opening of file' );
+  is( join('',<$in>), $check,		'check whether monitoring ok' );
+  ok( close( $in ),			'check closing of file' );
+
+  ok( unlink( $file ) );
+} #$times
+
+} #$optimize

@@ -1,49 +1,56 @@
 package Thread::Conveyor::Monitored;
 
-# Make sure we inherit from Thread::Conveyor
 # Make sure we have version info for this module
 # Make sure we do everything by the book from now on
 
-our @ISA : unique = qw(Thread::Conveyor);
-our $VERSION : unique = '0.03';
+our $VERSION : unique = '0.04';
 use strict;
 
 # Make sure we have conveyor belts
-# Make sure we have monitored throttled belts
 
 use Thread::Conveyor ();
-use Thread::Conveyor::Monitored::Throttled ();
 
+# Number of times this namespace has been CLONEd
 # Allow for self referencing within monitoring thread
+# Set default optimization
 
+my $cloned = 0;
 my $BELT;
+my $OPTIMIZE = 'memory';
 
 # Satisfy -require-
 
 1;
 
 #---------------------------------------------------------------------------
+
+# Class methods
+
+#---------------------------------------------------------------------------
 #  IN: 1 class to bless with
-#      2 reference/name of subroutine doing the monitoring
-#      3 value to consider end of monitoring action (default: undef)
+#      2 hash reference with parameters
+#      3..N parameters to be passed to "pre" routine
 # OUT: 1 instantiated object
-#      2 (optional) thread object of monitoring thread
 
 sub new {
 
 # Obtain the class
-# Obtain the parameter hash reference
-# Obtain local copy of code to execute
-# Die now if nothing specified
+# Obtain the parameter hash reference and make it an object
+# Save the clone level (so we can check later if we've been cloned)
+# Set the default optimization to be used
 
     my $class = shift;
-    my $param = shift;
-    my $monitor = $param->{'monitor'};
-    die "Must specify subroutine to monitor the conveyor belt" unless $monitor;
+    my $self = bless shift,$class;
+    $self->{'cloned'} = $cloned;
+    $self->{'optimize'} ||= $OPTIMIZE;
 
+# Obtain local copy of code to execute
+# Die now if nothing specified
 # Create the namespace
 # If we don't have a code reference yet, make it one
 
+    my $monitor = $self->{'monitor'};
+    die "Must specify subroutine to monitor the conveyor belt" unless $monitor;
     my $namespace = caller().'::';
     $monitor = _makecoderef( $namespace,$monitor ) unless ref($monitor);
 
@@ -52,70 +59,87 @@ sub new {
 # Obtain local copy of the post subroutine reference
 # If we have one but it isn't a code reference yet, make it one
 
-    my $pre = $param->{'pre'};
+    my $pre = $self->{'pre'};
     $pre = _makecoderef( $namespace,$pre ) if $pre and !ref($pre);
-    my $post = $param->{'post'};
+    my $post = $self->{'post'};
     $post = _makecoderef( $namespace,$post ) if $post and !ref($post);
 
 # Initialize the belt
 # If we already have a belt
-#  If it is a throttled belt
-#   Rebless the object as a throttled version of ourselves
-#   For all the special methods
-#    Reloop if the field is not specified
-#    Execute the method on that object
-#  Else (not a throttled belt)
-#   Rebless the object as ourselves
+#  For all the special methods
+#   Reloop if the field is not specified
+#   Execute the method on that object
 
     my $belt;
-    if ($belt = $param->{'belt'}) {
-        if (ref($belt) =~ m#::Throttled$#) {
-            $belt = bless $belt,$class.'::Throttled';
-            foreach (qw(maxboxes minboxes)) {
-                next unless exists( $param->{$_} );
-                $belt->$_( $param->{$_} );
-            }
-        } else {
-            $belt = bless $belt,$class;
+    if ($belt = $self->{'belt'}) {
+        foreach (qw(maxboxes minboxes)) {
+            next unless exists( $self->{$_} );
+            $belt->$_( $self->{$_} );
         }
 
-
 # Else (we don't have a belt yet)
-#  Initialize a belt parameter hash
-#  Set maxboxes field if specified
-#  Set minboxes field if specified
+#  For all of the parameters that we need to pass on
+#   Set the field if it was specified
 #  Create a belt with these parameters
 
     } else {
-        my $beltparam = {};
-        $beltparam->{'maxboxes'} = $param->{'maxboxes'}
-         if exists( $param->{'maxboxes'} );
-        $beltparam->{'minboxes'} = $param->{'minboxes'}
-         if exists( $param->{'minboxes'} );
-        $belt = $class->SUPER::new( $beltparam );
+        foreach (qw(optimize maxboxes minboxes)) {
+            $belt->{$_} = $self->{$_} if exists( $self->{$_} );
+        }
+        $self->{'belt'} = $belt = Thread::Conveyor->new( $belt );
     }
 
 # Create a thread monitoring the belt
-# Return the belt object or both objects
+# Return the blessed object
 
-    my $thread = threads->new(
+    $self->{'thread'} = threads->new(
      \&_monitor,
      $belt,
-     wantarray,         # true if we do not want to detach
      $monitor,
-     $param->{'exit'},	# don't care if not available: then undef = exit value
+     $self->{'exit'},	# don't care if not available: then undef = exit value
      $post,
      $pre,
      @_
     );
-    return wantarray ? ($belt,$thread) : $belt;
+    $self;
 } #new
 
 #---------------------------------------------------------------------------
-#  IN: 1 class (ignored)
-# OUT: 1 instantiated Thread::Conveyor object
+#  IN: 1 class (ignored) or instantiated object
+# OUT: 1 instantiated Thread::Conveyor::xxx object
 
-sub belt { $BELT } #belt
+sub belt {
+
+# Obtain the object
+# Return the appropriate belt object
+
+    my $self = shift;
+    return ref($self) ? $self->{'belt'} : $BELT;
+} #belt
+
+#---------------------------------------------------------------------------
+#  IN: 1 class (ignored)
+#      2 new default optimization type
+# OUT: 1 current default optimization type
+
+sub optimize {
+
+# Set new optimized value if specified
+# Return current optimized value
+
+    $OPTIMIZE = $_[1] if @_ > 1;
+    $OPTIMIZE;
+} #optimize
+
+#---------------------------------------------------------------------------
+
+# Instance methods
+
+#---------------------------------------------------------------------------
+#  IN: 1 instantiated object
+#      2..N values to be placed on the belt
+
+sub put { shift->{'belt'}->put( @_ ) } #put
 
 #---------------------------------------------------------------------------
 #  IN: 1 instantiated object (ignored)
@@ -146,6 +170,65 @@ sub peek { _die() } #peek
 #  IN: 1 instantiated object (ignored)
 
 sub peek_dontwait { _die() } #peek_dontwait
+
+#---------------------------------------------------------------------------
+#  IN: 1 instantiated object
+# OUT: 1 number of boxes on the belt
+
+sub onbelt { shift->{'belt'}->onbelt( @_ ) } #onbelt
+
+#---------------------------------------------------------------------------
+#  IN: 1 instantiated object
+#      2 new maximum number of boxes
+# OUT: 1 current maximum number of boxes on the belt
+
+sub maxboxes { shift->{'belt'}->maxboxes( @_ ) } #maxboxes
+
+#---------------------------------------------------------------------------
+#  IN: 1 instantiated object
+#      2 new minimum number of boxes
+# OUT: 1 current minimum number of boxes on the belt
+
+sub minboxes { shift->{'belt'}->minboxes( @_ ) } #minboxes
+
+#---------------------------------------------------------------------------
+#  IN: 1 instantiated object
+# OUT: 1 whatever was returned by the monitoring thread
+
+sub shutdown {
+
+# Obtain the object
+# Return now if already shutdown
+# Mark the object as shut down
+
+    my $self = shift;
+    return if exists $self->{'shutdown'};
+    $self->{'shutdown'} = 1;
+
+# Obtain the belt
+# Put the exit value on the belt
+# Wait for the monitoring thread to shutdown and keep its values
+# Wait for the belt to shutdown
+# Return whatever was returned from the monitoring thread
+
+    my $belt = $self->{'belt'};
+    $belt->put( $self->{'exit'} );
+    my @return = $self->{'thread'}->join;
+    $belt->shutdown;
+    @return;
+} #shutdown
+
+#---------------------------------------------------------------------------
+#  IN: 1 instantiated object
+# OUT: 1 monitoring thread
+
+sub thread { shift->{'thread'} } #thread
+
+#---------------------------------------------------------------------------
+#  IN: 1 instantiated object
+# OUT: 1 thread id of monitoring thread
+
+sub tid { shift->{'thread'}->tid } #tid
 
 #---------------------------------------------------------------------------
 
@@ -181,21 +264,18 @@ sub _makecoderef {
 
 #---------------------------------------------------------------------------
 #  IN: 1 belt object to monitor
-#      2 flag: to keep thread attached
-#      3 code reference of monitoring routine
-#      4 exit value
-#      5 code reference of preparing routine (if available)
-#      6..N parameters passed to creation routine
+#      2 code reference of monitoring routine
+#      3 exit value
+#      4 code reference of preparing routine (if available)
+#      5..N parameters passed to creation routine
 
 sub _monitor {
 
 # Obtain the belt object
-# Make sure this thread disappears outside if we don't want to keep it
 # Obtain the monitor code reference
 # Obtain the exit value
 
     my $belt = $BELT = shift;
-    threads->self->detach unless shift;
     my $monitor = shift;
     my $exit = shift;
 
@@ -210,7 +290,6 @@ sub _monitor {
 # While we're processing
 #  Obtain frozen copies of all the boxes and clean the belt
 #  For all of the boxes just obtained
-#   Obtain the actual values that are frozen in the box
 #   If there is a defined exit value
 #    Return now with result of post() if so indicated
 #   Elsif found value is not defined (so same as exit value)
@@ -218,18 +297,46 @@ sub _monitor {
 #   Call the monitoring routine with all the values
 
     while( 1 ) {
-        my @value = $belt->_clean;
-        foreach my $value (@value) {
-            my @set = @{$belt->_thaw( $value )};
+        my @value = $belt->clean;
+        foreach my $list (@value) {
             if (defined($exit)) {
-                return $post->( @_ ) if $set[0] eq $exit;
-            } elsif (!defined( $set[0] )) {
+                return $post->( @_ ) if $list->[0] eq $exit;
+            } elsif (!defined( $list->[0] )) {
                 return $post->( @_ );
             }
-            $monitor->( @set );
+            $monitor->( @{$list} );
         }
     }
 } #_monitor
+
+#---------------------------------------------------------------------------
+
+# Routines for standard Perl features
+
+#---------------------------------------------------------------------------
+#  IN: 1 namespace being cloned (ignored)
+
+sub CLONE { $cloned++ } #CLONE
+
+#---------------------------------------------------------------------------
+#  IN: 1 instantiated object
+
+sub DESTROY {
+
+# Return now if we're in a rogue DESTROY
+
+    return unless UNIVERSAL::isa( $_[0],__PACKAGE__ ); #HACK
+
+# Obtain the object
+# Return now if we're not allowed to run DESTROY
+
+    my $self = shift;
+    return unless $self->{'cloned'} == $cloned;
+
+# Tell the monitoring thread to quit now
+
+    $self->shutdown;
+} #DESTROY
 
 #---------------------------------------------------------------------------
 
@@ -242,7 +349,7 @@ Thread::Conveyor::Monitored - monitor a belt for specific content
 =head1 SYNOPSIS
 
     use Thread::Conveyor::Monitored;
-    my ($belt,$thread) = Thread::Conveyor::Monitored->new(
+    my $mbelt = Thread::Conveyor::Monitored->new(
      {
       monitor => sub { print "monitoring value $_[0]\n" }, # is a must
       pre => sub { print "prepare monitoring\n" },         # optional
@@ -250,15 +357,22 @@ Thread::Conveyor::Monitored - monitor a belt for specific content
       belt => $belt,   # use existing belt, create new if not specified
       exit => 'exit',  # defaults to undef
 
-      maxboxes => 50,  # specify throttling
-      minboxes => 25,  # parameters
+      optimize => 'memory', # optimization
+      maxboxes => 50,       # specify throttling
+      minboxes => 25,       # parameters
      }
     );
 
-    $belt->put( "foo",['listref'],{'hashref'} );
-    $belt->put( undef ); # exit value by default
+    $mbelt->put( "foo",['listref'],{'hashref'} );
+    $mbelt->put( undef ); # exit value by default
+    $mbelt->shutdown;
 
-    @post = $thread->join; # optional, wait for monitor thread to end
+    $mthread = $mbelt->thread;
+    $mtid = $mbelt->tid;
+
+    $belt = $mbelt->belt;
+
+    @post = $mthread->join; # optional, wait for monitor thread to end
 
     $belt = Thread::Conveyor::Monitored->belt; # "pre", "do", "post"
 
@@ -292,23 +406,24 @@ belt.
 
 =head2 new
 
- ($belt,$thread) = Thread::Conveyor::Monitored->new(
+ $mbelt = Thread::Conveyor::Monitored->new(
   {
    pre => \&pre,
    monitor => 'monitor',
    post => \&module::post,
    belt => $belt,   # use existing belt, create new if not specified
    exit => 'exit',  # defaults to undef
-  }
+
+   optimize => 'memory',
+   maxboxes => 50,
+   minboxes => 25,
+  },
+  @parameters
  );
 
 
 The C<new> function creates a monitoring function on an existing or on a new
-(empty) belt.  It returns the instantiated Thread::Conveyor::Monitored object
-in scalar context: in that case, the monitoring thread will be detached and
-will continue until the exit value is put in a box on the belt.  In list
-context, the thread object is also returned, which can be used to wait
-for the thread to be really finished using the C<join()> method.
+(empty) belt.  It returns the instantiated Thread::Conveyor::Monitored object.
 
 The first input parameter is a reference to a hash that should at least
 contain the "monitor" key with a subroutine reference.
@@ -420,6 +535,17 @@ to seize monitoring.  The "undef" value will be assumed if it is not specified.
 This value should be L<put> in a box on the belt to have the monitoring thread
 stop.
 
+=item optimize
+
+ optimize => 'cpu', # default: 'memory'
+
+The "optimize" field specifies which implementation of the belt will be
+selected if there is no existing belt specified with the 'belt' field.
+Currently there are two choices: 'cpu' and 'memory'.  By default, the
+"memory" optimization will be selected if no specific optmization is specified.
+
+You can call the class method L<optimize> to change the default optimization.
+
 =item maxboxes
 
  maxboxes => 50,
@@ -461,25 +587,59 @@ during the lifetime of the object.
 
  $belt = Thread::Conveyor::Monitored->belt; # only within "pre" and "do"
 
-The class method "belt" returns the L<Thread::Conveyor> object for which this
+The class method "belt" returns the L<Thread::Conveyor>::xxx object that this
 thread is monitoring.  It is available within the "pre" and "do" subroutine
 only.
+
+=head2 optimize
+
+ Thread::Conveyor::Monitored->optimize( 'cpu' );
+
+ $optimize = Thread::Conveyor::Monitored->optimize;
+
+The "optimize" class method allows you to specify the default optimization
+type that will be used if no "optimize" field has been explicitely specified
+with a call to L<new>.  It returns the current default type of optimization.
+
+Currently two types of optimization can be selected:
+
+=over 2
+
+=item memory
+
+Attempt to use as little memory as possible.  Currently, this is achieved by
+starting a seperate thread which hosts an unshared array.  This uses the
+"Thread::Conveyor::Thread" sub-class.
+
+=item cpu
+
+Attempt to use as little CPU as possible.  Currently, this is achieved by
+using a shared array (using the "Thread::Conveyor::Array" sub-class),
+encapsulated in a hash reference if throttling is activated (then also using
+the "Thread::Conveyor::Throttled" sub-class).
+
+=back
 
 =head1 OBJECT METHODS
 
 =head2 put
 
- $belt->put( $scalar,[],{} );
- $belt->put( 'exit' ); # stop monitoring
+ $mbelt->put( $scalar,[],{} );
+ $mbelt->put( 'exit' ); # stop monitoring
 
 The "put" method freezes all specified parameters in a box and puts it on
 the belt.  The monitoring thread will stop monitoring if the "exit" value
 is put in the box.
 
+Please note that if you need to be very efficient, it may be wortwhile to
+extract the actual L<belt> object first and use that to put boxes on the
+belt.  The monitored "put" method is in fact only a gateway to the actual
+belt that is inside this object.
+
 =head2 maxboxes
 
- $belt->maxboxes( 100 );
- $maxboxes = $belt->maxboxes;
+ $mbelt->maxboxes( 100 );
+ $maxboxes = $mbelt->maxboxes;
 
 The "maxboxes" method returns the maximum number of boxes that can be on the
 belt before throttling sets in.  The input value, if specified, specifies the
@@ -496,8 +656,8 @@ value is assumed.
 
 =head2 minboxes
 
- $belt->minboxes( 50 );
- $minboxes = $belt->minboxes;
+ $mbelt->minboxes( 50 );
+ $minboxes = $mbelt->minboxes;
 
 The "minboxes" method returns the minimum number of boxes that must be on the
 belt before the putting of boxes is allowed again after reaching the maximum
@@ -509,6 +669,39 @@ equivalent to calling this method.
 
 The L<maxboxes> method can be called to set the maximum number of boxes that
 may be on the belt before the putting of boxes will be halted.
+
+=head2 belt
+
+ $belt = $mbelt->belt;
+
+The "belt" instance method returns the L<Thread::Conveyor>::xxx object that
+is being monitored.
+
+=head2 shutdown
+
+ $mbelt->shutdown;
+
+ @from_monitor_thread = $mbelt->shutdown;
+
+The "shutdown" method performs an orderly shutdown of the belt.  It waits
+until all of the boxes on the belt have been removed before it returns.
+
+Whatever was returned by the "post" routine of the monitoring thread, will
+also be returned by the "shutdown" method.
+
+=head2 thread
+
+ $mthread = $mbelt->thread;
+
+The "thread" method returns the thread object that is monitoring the contents
+of the belt.
+
+=head2 tid
+
+ $tid = $mbelt->tid;
+
+The "tid" method returns the thread id of the thread object that is monitoring
+the contents of the belt.
 
 =head1 CAVEATS
 
@@ -540,4 +733,3 @@ modify it under the same terms as Perl itself.
 L<threads>, L<threads::shared>, L<Thread::Conveyor>, L<Storable>.
 
 =cut
-cut

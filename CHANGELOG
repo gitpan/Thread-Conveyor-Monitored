@@ -1,3 +1,36 @@
+0.04	7 August 2002
+	Added "private" default optimization setting, instead of the one
+	from Thread::Conveyor.
+
+	6 August 2002
+	Fixed problem in shutdown which would cause deadlocks when using
+	belts optimized for memory.
+
+	5 August 2002
+	Added many more test-cases to the test-suite.
+
+	Added DESTROY method and clone sensing logic, because a shutdown
+	method is now available.
+
+	Added method "shutdown" for an orderly shutdown of the monitoring
+	thread.  You should now not call method "put" with the exit value
+	anymore.  Instead you should call method "shutdown".
+
+	Added method "tid" to obtain the thread id of the monitoring thread.
+
+	The "new" method now only returns the instantiated object.  If you
+	want access to the monitoring thread, you should obtain that with
+	the new "thread" routine.
+
+	Made the Thread::Conveyor::Monitored object stand-alone with a
+	Thread::Conveyor::xxx object in its belly.  Added access methods
+	so that they apply to the belt rather than the object itself.  This
+	makes the Thread::Conveyor::Monitored::Throttled module obsolete:
+	it is now removed from the distribution.  Added documentation for
+	all of these new features.
+
+	Upgraded to be able to use (and required) newest Thread::Conveyor.
+
 0.03    1 August 2002
 	Changed required version of Thread::Conveyor to 0.04.
 
