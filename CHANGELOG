@@ -1,3 +1,15 @@
+0.02	31 July 2002
+	Added Thread::Conveyor::Monitored::Throttled almost empty sub-class 
+	for handling throttled monitored conveyors.
+
+	Adapted documentation to reflect the new "maxboxes" and "minboxes"
+	fields and modules.  Adapted test-suite as well.
+
+	Adapted makefile.PL to require Thread::Conveyor 0.03.
+
+	Adapted "new" to allow for "maxboxes" and "minboxes" settings now that
+	Thread::Conveyor can be throttled.
+
 0.01	25 July 2002
 	First version of Thread::Conveyor::Monitored, which started life as
 	Thread::Queue::Any::Monitored.

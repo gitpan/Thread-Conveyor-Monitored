@@ -13,6 +13,8 @@ BEGIN { use_ok('Thread::Conveyor::Monitored') }
 
 can_ok( 'Thread::Conveyor::Monitored',qw(
  belt
+ clean
+ clean_dontwait
  new
  onbelt
  peek

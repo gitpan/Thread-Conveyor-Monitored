@@ -5,12 +5,14 @@ package Thread::Conveyor::Monitored;
 # Make sure we do everything by the book from now on
 
 our @ISA : unique = qw(Thread::Conveyor);
-our $VERSION : unique = '0.01';
+our $VERSION : unique = '0.02';
 use strict;
 
 # Make sure we have conveyor belts
+# Make sure we have monitored throttled belts
 
-use Thread::Conveyor;
+use Thread::Conveyor ();
+use Thread::Conveyor::Monitored::Throttled ();
 
 # Allow for self referencing within monitoring thread
 
@@ -55,27 +57,53 @@ sub new {
     my $post = $param->{'post'};
     $post = _makecoderef( $namespace,$post ) if $post and !ref($post);
 
-# Obtain a standard Conveyor object, either reblessed from the hash or new
+# Initialize the belt
+# If we already have a belt
+#  Set to use the throttled class if the belt is already throttled
+#  Rebless the object as ourselves
+#  For all the special methods
+#   Reloop if the field is not specified
+#   Execute the method on that object
 
-    my $self = $param->{'belt'} ?
-     bless $param->{'belt'},$class : $class->SUPER::new;
+    my $belt;
+    if ($belt = $param->{'belt'}) {
+        $class .= '::Throttled' if ref($belt) =~ m#::Throttled$#;
+        $belt = bless $belt,$class;
+        foreach (qw(maxboxes minboxes)) {
+            next unless exists( $param->{$_} );
+            $belt->$_( $param->{$_} );
+        }
 
-# Allow for the automatic monitor routine selection
+
+# Else (we don't have a belt yet)
+#  Initialize a belt parameter hash
+#  Set maxboxes field if specified
+#  Set minboxes field if specified
+#  Create a belt with these parameters
+
+    } else {
+        my $beltparam = {};
+        $beltparam->{'maxboxes'} = $param->{'maxboxes'}
+         if exists( $param->{'maxboxes'} );
+        $beltparam->{'minboxes'} = $param->{'minboxes'}
+         if exists( $param->{'minboxes'} );
+        $belt = $class->SUPER::new( $beltparam );
+    }
+
 # Create a thread monitoring the belt
 # Return the belt object or both objects
 
-    no strict 'refs';
     my $thread = threads->new(
-     \&{$class.'::_monitor'},
-     $self,
-     wantarray,
+     \&_monitor,
+     $belt,
+     wantarray,         # true if we do not want to detach
      $monitor,
      $param->{'exit'},	# don't care if not available: then undef = exit value
      $post,
      $pre,
      @_
     );
-    return wantarray ? ($self,$thread) : $self;
+    return wantarray ? ($belt,$thread) : $belt;
 } #new
 
 #---------------------------------------------------------------------------
@@ -87,22 +115,32 @@ sub belt { $BELT } #belt
 #---------------------------------------------------------------------------
 #  IN: 1 instantiated object (ignored)
 
-sub take { _die() }
+sub take { _die() } #take
 
 #---------------------------------------------------------------------------
 #  IN: 1 instantiated object (ignored)
 
-sub take_dontwait { _die() }
+sub take_dontwait { _die() } #take_dontwait
 
 #---------------------------------------------------------------------------
 #  IN: 1 instantiated object (ignored)
 
-sub peek { _die() }
+sub clean { _die() } #clean
 
 #---------------------------------------------------------------------------
 #  IN: 1 instantiated object (ignored)
 
-sub peek_dontwait { _die() }
+sub clean_dontwait { _die() } #clean_dontwait
+
+#---------------------------------------------------------------------------
+#  IN: 1 instantiated object (ignored)
+
+sub peek { _die() } #peek
+
+#---------------------------------------------------------------------------
+#  IN: 1 instantiated object (ignored)
+
+sub peek_dontwait { _die() } #peek_dontwait
 
 #---------------------------------------------------------------------------
 
@@ -164,22 +202,8 @@ sub _monitor {
     my $pre = shift;
     $pre->( @_ ) if $pre;
 
-# Initialize the list with values to process
 # While we're processing
-#  Wait until we can get a lock on the belt
-#  Wait until something happens on the queu
-#  Obtain all values from the belt
-#  Reset the belt
-
-    my @value;
-    while( 1 ) {
-        {
-         lock( @$belt );
-         threads::shared::cond_wait @$belt until @$belt;
-         @value = @$belt;
-         @$belt = ();
-        }
-
+#  Obtain frozen copies of all the boxes and clean the belt
 #  For all of the boxes just obtained
 #   Obtain the actual values that are frozen in the box
 #   If there is a defined exit value
@@ -188,8 +212,10 @@ sub _monitor {
 #    Return now with result of post()
 #   Call the monitoring routine with all the values
 
+    while( 1 ) {
+        my @value = $belt->_clean;
         foreach my $value (@value) {
-            my @set = @{Storable::thaw( $value )};
+            my @set = @{$belt->_thaw( $value )};
             if (defined($exit)) {
                 return $post->( @_ ) if $set[0] eq $exit;
             } elsif (!defined( $set[0] )) {
@@ -218,6 +244,9 @@ Thread::Conveyor::Monitored - monitor a belt for specific content
       post => sub { print "stop monitoring\n" },           # optional
       belt => $belt,   # use existing belt, create new if not specified
       exit => 'exit',  # defaults to undef
+
+      maxboxes => 50,  # specify throttling
+      minboxes => 25,  # parameters
      }
     );
 
@@ -386,6 +415,41 @@ to seize monitoring.  The "undef" value will be assumed if it is not specified.
 This value should be L<put> in a box on the belt to have the monitoring thread
 stop.
 
+=item maxboxes
+
+ maxboxes => 50,
+
+ maxboxes => undef,  # disable throttling
+
+The "maxboxes" field specifies the B<maximum> number of boxes that can be
+sitting on the belt to be handled (throttling).  If a new L<put> would
+exceed this amount, putting of boxes will be halted until the number of
+boxes waiting to be handled has become at least as low as the amount
+specified with the "minboxes" field.
+
+Fifty boxes will be assumed for the "maxboxes" field if it is not specified.
+If you do not want to have any throttling, you can specify the value "undef"
+for the field.  But beware!  If you do not have throttling active, you may
+wind up using excessive amounts of memory used for storing all of the boxes
+that have not been handled yet.
+
+The L<maxboxes> method can be called to change the throttling settings
+during the lifetime of the object.
+
+=item minboxes
+
+ minboxes => 25, # default: maxboxes / 2
+
+The "minboxes" field specified the B<minimum> number of boxes that can be
+waiting on the belt to be handled before the L<put>ting of boxes is allowed
+again (throttling).
+
+If throttling is active and the "minboxes" field is not specified, then
+half of the "maxboxes" value will be assumed.
+
+The L<minboxes> method can be called to change the throttling settings
+during the lifetime of the object.
+
 =back
 
 =head2 belt
@@ -406,6 +470,40 @@ only.
 The "put" method freezes all specified parameters in a box and puts it on
 the belt.  The monitoring thread will stop monitoring if the "exit" value
 is put in the box.
+
+=head2 maxboxes
+
+ $belt->maxboxes( 100 );
+ $maxboxes = $belt->maxboxes;
+
+The "maxboxes" method returns the maximum number of boxes that can be on the
+belt before throttling sets in.  The input value, if specified, specifies the
+new maximum number of boxes that may be on the belt.  Throttling will be
+switched off if the value B<undef> is specified.
+
+Specifying the "maxboxes" field when creating the object with L<new> is
+equivalent to calling this method.
+
+The L<minboxes> method can be called to specify the minimum number of boxes
+that must be on the belt before the putting of boxes is allowed again after
+reaching the maximum number of boxes.  By default, half of the "maxboxes"
+value is assumed.
+
+=head2 minboxes
+
+ $belt->minboxes( 50 );
+ $minboxes = $belt->minboxes;
+
+The "minboxes" method returns the minimum number of boxes that must be on the
+belt before the putting of boxes is allowed again after reaching the maximum
+number of boxes.  The input value, if specified, specifies the new minimum
+number of boxes that must be on the belt.
+
+Specifying the "minboxes" field when creating the object with L<new> is
+equivalent to calling this method.
+
+The L<maxboxes> method can be called to set the maximum number of boxes that
+may be on the belt before the putting of boxes will be halted.
 
 =head1 CAVEATS
 

@@ -40,7 +40,8 @@ ok( $onbelt >= 0 and $onbelt <= $times, 'check number of values on the belt' );
 $belt->put( undef ); # stop monitoring
 is( $thread->join,'anydone',			'check result of join' );
 
-is( $object,'Thread::Conveyor::Monitored', 'check result of ->belt' );
+ok( $object =~ m#^Thread::Conveyor::Monitored(?:::Throttled)?$#,
+ 'check result of ->belt' );
 
 my $check = '';
 $check .= ($_.($_+1)) foreach 1..$times;

@@ -9,6 +9,6 @@ WriteMakefile (
   ABSTRACT	=> 'monitor a belt for specific content') : (),
  VERSION_FROM	=> 'lib/Thread/Conveyor/Monitored.pm',
  PREREQ_PM	=> {
-                    'Thread::Conveyor' => 0,
+                    'Thread::Conveyor' => '0.03',
                    },
 );
