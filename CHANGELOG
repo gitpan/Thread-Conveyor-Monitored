@@ -1,3 +1,11 @@
+0.03    1 August 2002
+	Changed required version of Thread::Conveyor to 0.04.
+
+	Fixed problem in "new" when using an existing, unthrottled belt.
+
+	Fixed problem in test-suite cause by the new ::Throttled sub-class
+	of Thread::Conveyor.
+
 0.02	31 July 2002
 	Added Thread::Conveyor::Monitored::Throttled almost empty sub-class 
 	for handling throttled monitored conveyors.

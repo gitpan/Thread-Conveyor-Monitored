@@ -5,7 +5,7 @@ package Thread::Conveyor::Monitored::Throttled;
 # Make sure we do everything by the book from now on
 
 our @ISA : unique = qw(Thread::Conveyor::Monitored);
-our $VERSION : unique = '0.02';
+our $VERSION : unique = '0.03';
 use strict;
 
 # Make sure we can do naughty things

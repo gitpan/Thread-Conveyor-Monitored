@@ -5,7 +5,7 @@ package Thread::Conveyor::Monitored;
 # Make sure we do everything by the book from now on
 
 our @ISA : unique = qw(Thread::Conveyor);
-our $VERSION : unique = '0.02';
+our $VERSION : unique = '0.03';
 use strict;
 
 # Make sure we have conveyor belts
@@ -59,19 +59,24 @@ sub new {
 
 # Initialize the belt
 # If we already have a belt
-#  Set to use the throttled class if the belt is already throttled
-#  Rebless the object as ourselves
-#  For all the special methods
-#   Reloop if the field is not specified
-#   Execute the method on that object
+#  If it is a throttled belt
+#   Rebless the object as a throttled version of ourselves
+#   For all the special methods
+#    Reloop if the field is not specified
+#    Execute the method on that object
+#  Else (not a throttled belt)
+#   Rebless the object as ourselves
 
     my $belt;
     if ($belt = $param->{'belt'}) {
-        $class .= '::Throttled' if ref($belt) =~ m#::Throttled$#;
-        $belt = bless $belt,$class;
-        foreach (qw(maxboxes minboxes)) {
-            next unless exists( $param->{$_} );
-            $belt->$_( $param->{$_} );
+        if (ref($belt) =~ m#::Throttled$#) {
+            $belt = bless $belt,$class.'::Throttled';
+            foreach (qw(maxboxes minboxes)) {
+                next unless exists( $param->{$_} );
+                $belt->$_( $param->{$_} );
+            }
+        } else {
+            $belt = bless $belt,$class;
         }
 
 
@@ -535,3 +540,4 @@ modify it under the same terms as Perl itself.
 L<threads>, L<threads::shared>, L<Thread::Conveyor>, L<Storable>.
 
 =cut
+cut
