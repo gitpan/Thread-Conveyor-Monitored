@@ -3,7 +3,7 @@ package Thread::Conveyor::Monitored;
 # Make sure we have version info for this module
 # Make sure we do everything by the book from now on
 
-$VERSION = '0.11';
+$VERSION = '0.12';
 use strict;
 
 # Make sure we only load stuff when we actually need it
@@ -831,9 +831,14 @@ of the belt.
 The "tid" method returns the thread id of the thread object that is monitoring
 the contents of the belt.
 
+=head1 REQUIRED MODULES
+
+ load (any)
+ Thread::Conveyor (0.15)
+
 =head1 OPTIMIZATIONS
 
-This module uses L<AutoLoader> to reduce memory and CPU usage. This causes
+This module uses L<load> to reduce memory and CPU usage. This causes
 subroutines only to be compiled in a thread when they are actually needed at
 the expense of more CPU when they need to be compiled.  Simple benchmarks
 however revealed that the overhead of the compiling single routines is not
@@ -864,6 +869,7 @@ modify it under the same terms as Perl itself.
 
 =head1 SEE ALSO
 
-L<threads>, L<threads::shared>, L<Thread::Conveyor>, L<Thread::Serialize>.
+L<threads>, L<threads::shared>, L<Thread::Conveyor>, L<Thread::Serialize>,
+L<load>.
 
 =cut
