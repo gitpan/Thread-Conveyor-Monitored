@@ -7,3 +7,4 @@ Makefile.PL
 lib/Thread/Conveyor/Monitored.pm
 t/Conveyor-Monitored01.t
 t/Conveyor-Monitored02.t
+t/Conveyor-Monitored03.t

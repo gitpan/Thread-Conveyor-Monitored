@@ -14,6 +14,8 @@ my $file = 'outmonitored';
 my $handle;
 my $class : shared;
 
+diag( "Monitoring to file" );
+
 foreach my $optimize (qw(cpu memory)) {
 
 foreach my $times (10,100,1000,int(rand(1000))) {

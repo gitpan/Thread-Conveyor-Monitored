@@ -1,3 +1,8 @@
+0.07	27 August 2002
+	Added support for checkpoint routine with the "checkpoint" and
+	"frequency" fields and the "frequency" method.  Added test-suite
+	and documentation for it.
+
 0.06	20 August 2002
 	No actual changes to the code, just an upgrade to require the newly
 	fixed Thread::Conveyor 0.08 version.

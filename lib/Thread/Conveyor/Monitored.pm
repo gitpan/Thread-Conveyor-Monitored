@@ -3,7 +3,7 @@ package Thread::Conveyor::Monitored;
 # Make sure we have version info for this module
 # Make sure we do everything by the book from now on
 
-our $VERSION : unique = '0.06';
+our $VERSION : unique = '0.07';
 use strict;
 
 # Make sure we have conveyor belts
@@ -13,10 +13,12 @@ use Thread::Conveyor ();
 # Number of times this namespace has been CLONEd
 # Allow for self referencing within monitoring thread
 # Set default optimization
+# Set default checkpoint frequency
 
 my $cloned = 0;
 my $BELT;
 my $OPTIMIZE = 'memory';
+my $FREQUENCY = 1000;
 
 # Satisfy -require-
 
@@ -58,11 +60,16 @@ sub new {
 # If we have one but it isn't a code reference yet, make it one
 # Obtain local copy of the post subroutine reference
 # If we have one but it isn't a code reference yet, make it one
+# Obtain local copy of the checkpoint subroutine reference
+# If we have one but it isn't a code reference yet, make it one
 
     my $pre = $self->{'pre'};
     $pre = _makecoderef( $namespace,$pre ) if $pre and !ref($pre);
     my $post = $self->{'post'};
     $post = _makecoderef( $namespace,$post ) if $post and !ref($post);
+    my $checkpoint = $self->{'checkpoint'};
+    $checkpoint = _makecoderef( $namespace,$checkpoint )
+     if $checkpoint and !ref($checkpoint);
 
 # Initialize the belt
 # If we already have a belt
@@ -97,6 +104,8 @@ sub new {
      $belt,
      $monitor,
      $self->{'exit'},	# don't care if not available: then undef = exit value
+     $checkpoint,
+     $self->{'frequency'},
      $post,
      $pre,
      @_
@@ -116,6 +125,31 @@ sub belt {
     my $self = shift;
     return ref($self) ? $self->{'belt'} : $BELT;
 } #belt
+
+#---------------------------------------------------------------------------
+#  IN: 1 class (ignored) or instantiated object
+#      2 new default checkpoint frequency (if called as class method only)
+# OUT: 1 default frequency
+
+sub frequency {
+
+# Obtain the object
+# If called as an object method
+#  Return undef if no checkpointing active
+#  Return frequency with which checkpointing is occurring
+
+    my $self = shift;
+    if (ref($self)) {
+        return unless $self->{'checkpoint'};
+        return $self->{'frequency'} || $FREQUENCY;
+    }
+
+# Set new default frequency if specified
+# Return current default frequency
+
+    $FREQUENCY = shift if @_;
+    $FREQUENCY;
+} #frequency
 
 #---------------------------------------------------------------------------
 #  IN: 1 class (ignored)
@@ -279,6 +313,14 @@ sub _monitor {
     my $monitor = shift;
     my $exit = shift;
 
+# Obtain any checkpoint reference
+# Obtain the frequence (if any)
+# Initialize the number of boxes to be monitored
+
+    my $checkpoint = shift;
+    my $frequency = $checkpoint ? (shift || $FREQUENCY) : shift;
+    my $tomonitor = $frequency;
+
 # Obtain the post subroutine reference or create an empty one
 # Obtain the preparation subroutine reference
 # Execute the preparation routine if there is one
@@ -305,6 +347,16 @@ sub _monitor {
                 return $post->( @_ );
             }
             $monitor->( @{$list} );
+
+#   Reloop if we're not checkpointing
+#   Reloop if it's not the right moment to checkpoint
+#   Execute the checkpoint routine
+#   Reset the number of boxes to monitor
+
+            next unless $checkpoint;
+            next if --$tomonitor;
+            &$checkpoint;
+            $tomonitor = $frequency;
         }
     }
 } #_monitor
@@ -357,6 +409,9 @@ Thread::Conveyor::Monitored - monitor a belt for specific content
       belt => $belt,   # use existing belt, create new if not specified
       exit => 'exit',  # defaults to undef
 
+      checkpoint => sub { print "checkpointing\n" },
+      frequency => 1000,
+
       optimize => 'memory', # optimization
       maxboxes => 50,       # specify throttling
       minboxes => 25,       # parameters
@@ -402,6 +457,8 @@ from the belt.
 Any number of threads can safely put boxes with values and reference on the
 belt.
 
+Optional checkpointing allows you to check and save intermediate status.
+
 =head1 CLASS METHODS
 
 =head2 new
@@ -413,6 +470,9 @@ belt.
    post => \&module::post,
    belt => $belt,   # use existing belt, create new if not specified
    exit => 'exit',  # defaults to undef
+
+   checkpoint => \&checkpoint,
+   frequency => 1000,
 
    optimize => 'memory',
    maxboxes => 50,
@@ -535,6 +595,46 @@ to seize monitoring.  The "undef" value will be assumed if it is not specified.
 This value should be L<put> in a box on the belt to have the monitoring thread
 stop.
 
+=item checkpoint
+
+ checkpoint => 'checkpointing',			# assume caller's namespace
+
+or:
+
+ checkpoint => 'Package::checkpointing',
+
+or:
+
+ checkpoint => \&SomeOther::checkpointing,
+
+or:
+
+ checkpoint => sub {print "anonymous sub to do checkpointing\n"},
+
+The "checkpoint" field specifies the subroutine to be executed everytime a
+checkpoint should be made (e.g. for saving or updating status).  It must be
+specified as either the name of a subroutine or as a reference to a
+(anonymous) subroutine.
+
+No checkpointing will occur by default.  The frequency of checkpointing can
+be specified with the "frequency" field.
+
+The specified subroutine should not expect any parameters to be passed.  Any
+values retuirned by the checkpointing routine, will be lost.
+
+=item frequency
+
+ frequency => 100,                             # default = 1000
+
+The "frequency" field specifies the number of boxes that should have been
+mnitored before the "checkpoint" routine is called.  If a checkpoint routine
+is specified but no frequency field is specified, then a frequency of B<1000>
+will be assumed.
+
+This field has no meaning if no checkpoint routine is specified with the
+"checkpoint" field.  The default frequency can be changed with the L<frequency>
+method.
+
 =item optimize
 
  optimize => 'cpu', # default: 'memory'
@@ -590,6 +690,17 @@ during the lifetime of the object.
 The class method "belt" returns the L<Thread::Conveyor>::xxx object that this
 thread is monitoring.  It is available within the "pre" and "do" subroutine
 only.
+
+=head2 frequency
+
+ Thread::Conveyor::Monitored->frequency( 100 );
+
+ $frequency = Thread::Conveyor::Monitored->frequency;
+
+The "frequency" class method allows you to specify the default frequency that
+will be used when a checkpoint routine is specified with the "checkpoint"
+field.  The default frequency is set to B<1000> if no other value has been
+previously specified.
 
 =head2 optimize
 
@@ -676,6 +787,13 @@ may be on the belt before the putting of boxes will be halted.
 
 The "belt" instance method returns the L<Thread::Conveyor>::xxx object that
 is being monitored.
+
+=head2 frequency
+
+ $frequency = $mbelt->frequency;
+
+The "frequency" instance method returns the frequency with which the checkpoint
+routine is being called.  Returns undef if no checkpointing is being done.
 
 =head2 shutdown
 

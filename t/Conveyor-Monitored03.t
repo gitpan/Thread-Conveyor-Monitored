@@ -6,41 +6,34 @@ BEGIN {				# Magic Perl CORE pragma
 }
 
 use strict;
-use Test::More tests => 3 + (2 * (4 * (2 * 4)));
+use Test::More tests => 4 + (2 * (6 * (2 * 4) + 1));
 
 BEGIN { use_ok('threads') }
 BEGIN { use_ok('Thread::Conveyor::Monitored') }
 
-can_ok( 'Thread::Conveyor::Monitored',qw(
- belt
- clean
- clean_dontwait
- new
- onbelt
- peek
- peek_dontwait
- put
- shutdown
- take
- take_dontwait
- thread
- tid
-) );
+cmp_ok( Thread::Conveyor::Monitored->frequency,'==',1000,
+ 'check default frequency' );
+cmp_ok( Thread::Conveyor::Monitored->frequency( 100 ),'==',100,
+ 'check setting of default frequency' );
 
 my @list : shared;
+my $checkpointed : shared;
 
-diag ( "Monitoring to array" );
+diag ( "Monitoring with checkpoints" );
 
 foreach my $optimize (qw(cpu memory)) {
+  $checkpointed = 0;
 
-foreach my $times (10,100,1000,int(rand(1000))) {
+foreach my $times (10,11,9,100,101,99) {
 
 diag ( "$times boxes optimized for $optimize" );
 
   check( Thread::Conveyor::Monitored->new(
    {
-    optimize => $optimize,
-    monitor => \&monitor,
+    optimize   => $optimize,
+    monitor    => \&monitor,
+    checkpoint => \&checkpoint,
+    frequency  => 10,
    }
   ),$times );
 
@@ -55,6 +48,8 @@ diag ( "$times boxes optimized for $optimize" );
   );
   check( $mbelt,$times,$exit,1 );
 } #$times
+
+  cmp_ok( $checkpointed,'==',31,	'check number of checkpoints' );
 
 } #$optimize
 
@@ -80,3 +75,5 @@ sub check {
 } #check
 
 sub monitor { push( @list,join('',@{$_[0]}) ) }
+
+sub checkpoint { $checkpointed++ }
