@@ -6,6 +6,7 @@ BEGIN {				# Magic Perl CORE pragma
 }
 
 use strict;
+use warnings;
 use Test::More tests => 1 + (2 * (4 * 11));
 
 BEGIN { use_ok('Thread::Conveyor::Monitored') }
@@ -44,7 +45,7 @@ diag( "$times boxes optimized for $optimize" );
 
   $mbelt->put( {$_ => $_+1} ) foreach 1..$times;
   my $onbelt = $mbelt->onbelt;
-  ok( $onbelt >= 0 and $onbelt <= $times, 'check number of values on the belt');
+  ok(($onbelt >= 0 and $onbelt <= $times),'check number of values on the belt');
 
   threads->yield until $class;
   ok( $class =~ m#^Thread::Conveyor::#,	'check result of ->belt' );

@@ -6,6 +6,7 @@ BEGIN {				# Magic Perl CORE pragma
 }
 
 use strict;
+use warnings;
 use Test::More tests => 4 + (2 * (6 * (2 * 4) + 1));
 
 BEGIN { use_ok('threads') }
@@ -65,7 +66,7 @@ sub check {
   my $belt = $mbelt->belt;
   $mbelt->put( [$_,$_+1] ) foreach 1..$times;
   my $onbelt = $mbelt->onbelt;
-  ok( $onbelt >= 0 and $onbelt <= $times, 'check number of values on belt' );
+  ok( ($onbelt >= 0 and $onbelt <= $times), 'check number of values on belt' );
 
   $mbelt->shutdown;
 
