@@ -3,12 +3,12 @@ package Thread::Conveyor::Monitored;
 # Make sure we have version info for this module
 # Make sure we do everything by the book from now on
 
-our $VERSION = '0.08';
+$VERSION = '0.09';
 use strict;
 
 # Make sure we only load stuff when we actually need it
 
-use AutoLoader 'AUTOLOAD';
+use load;
 
 # Make sure we have conveyor belts
 
@@ -38,6 +38,12 @@ our $FREQUENCY = 1000;
 sub CLONE { $cloned++ } #CLONE
 
 #---------------------------------------------------------------------------
+
+# All subroutines after here are loaded on demand only
+
+__END__
+
+#---------------------------------------------------------------------------
 #  IN: 1 instantiated object
 
 sub DESTROY {
@@ -56,12 +62,6 @@ sub DESTROY {
 
     $self->shutdown;
 } #DESTROY
-
-#---------------------------------------------------------------------------
-
-# AutoLoader takes over from here
-
-__END__
 
 #---------------------------------------------------------------------------
 
@@ -401,6 +401,8 @@ sub _monitor {
 } #_monitor
 
 #---------------------------------------------------------------------------
+
+__END__
 
 =head1 NAME
 

@@ -1,3 +1,10 @@
+0.09	29 September 2002
+	Use "load.pm" instead of AutoLoader.  Increased dependency on
+	Thread::Conveyor to 0.13, which also uses "load.pm".
+
+        Removed "our" from $VERSION, should shave off some bytes in
+        memory usage, as found from testing with Benchmark::Thread::Size.
+
 0.08	30 August 2002
 	Changed all modules to use AutoLoader to defer loading of necessary
 	subroutines to when they are actually needed.  This should save
