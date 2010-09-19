@@ -1,3 +1,15 @@
+0.14 	19 September 2010
+	Fixed problem in test-suite.  Apparently newer Test::Harness versions
+	dont't really cope that well with testing inside threads.  Apparently
+	tghe previous version never made it to CPAN.  :-(
+
+0.13    3 October 2007
+	Hopefully fixed test-suite for none thread enabled Perls.  Updated
+	to use new VERSION feature of Devel::Required.
+
+	28 January 2004
+	Made sure the test-suite cleans up on multi-versioned systems.
+
 0.12    28 December 2003
         Added automatic required modules update using Devel::Required.
 

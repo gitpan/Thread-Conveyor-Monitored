@@ -7,7 +7,7 @@ BEGIN {				# Magic Perl CORE pragma
 
 use strict;
 use warnings;
-use Test::More tests => 1 + (2 * (4 * 11));
+use Test::More tests => 1 + (2 * (4 * 9));
 
 BEGIN { use_ok('Thread::Conveyor::Monitored') }
 
@@ -27,12 +27,12 @@ diag( "$times boxes optimized for $optimize" );
    {
     optimize => $optimize,
     pre => sub {
-                ok( open( $handle,">$_[0]" ), 'check pre opening file' );
+                open( $handle,">$_[0]" ) or die "Could not open file";
                 $class = ref(Thread::Conveyor::Monitored->belt);
                },
     monitor => sub { print $handle (%{$_[0]}) },
     post => sub {
-                 ok( close( $handle ), 'check post closing file');
+                 close( $handle ) or die "Could not close file";
                  return 'anydone'
                 },
    },
@@ -59,6 +59,7 @@ diag( "$times boxes optimized for $optimize" );
   ok( close( $in ),			'check closing of file' );
 
   ok( unlink( $file ) );
+  1 while unlink $file; # multiversioned filesystems
 } #$times
 
 } #$optimize
